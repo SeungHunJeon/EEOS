@@ -322,8 +322,9 @@ int64_t get_wakeup_ticks(void)
 void
 thread_awake (int64_t ticks)
 {
-  struct list_elem *ele;
-  ele = list_begin(&sleep_list);
+  min_wakeup_ticks = INT64_MAX;
+  struct list_elem *ele = list_begin(&sleep_list);
+//  ele = list_begin(&sleep_list);
   while (ele != list_end(&sleep_list))
   {
     struct thread * thr = list_entry(ele, struct thread, elem);
@@ -334,7 +335,7 @@ thread_awake (int64_t ticks)
     }
     else {
       ele = list_next(ele);
-      update_wakeup_ticks(ticks);
+      update_wakeup_ticks(thr->wakeup_ticks);
     }
   }
 }
@@ -356,13 +357,17 @@ thread_sleep (int64_t ticks)
   old_level = intr_disable ();
   /* current thread != idle thread
    * means */
-  if (cur != idle_thread)
-    cur->status = THREAD_BLOCKED;
+  if (cur != idle_thread){
     cur->wakeup_ticks = ticks;
-    list_push_back (&sleep_list, &cur->elem);
     update_wakeup_ticks(ticks);
+    list_push_back (&sleep_list, &cur->elem);
+  }
+//    cur->status = THREAD_BLOCKED;
+
+  thread_block();
+
 //  cur->status = THREAD_READY;
-  schedule ();
+//  schedule ();
   intr_set_level (old_level);
 
 }
