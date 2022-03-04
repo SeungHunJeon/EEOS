@@ -28,6 +28,13 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+/*
+ List of alternative list. To avoid loop structure, sleep list concatenate
+ running threads and throw out after such time. For then, sleep list's
+ structure should be Queue(FIFO).
+ */
+static struct list sleep_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -69,6 +76,7 @@ static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
+static int64_t min_wakeup_ticks = INT64_MAX;
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
@@ -93,6 +101,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleep_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -139,6 +148,8 @@ thread_tick (void)
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
 }
+
+
 
 /* Prints thread statistics. */
 void
@@ -295,6 +306,65 @@ thread_exit (void)
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
+}
+
+void update_wakeup_ticks(int64_t wakeup_ticks)
+{
+  if (min_wakeup_ticks > wakeup_ticks)
+    min_wakeup_ticks = wakeup_ticks;
+}
+
+int64_t get_wakeup_ticks(void)
+{
+  return min_wakeup_ticks;
+}
+
+void
+thread_awake (int64_t ticks)
+{
+  struct list_elem *ele;
+  ele = list_begin(&sleep_list);
+  while (ele != list_end(&sleep_list))
+  {
+    struct thread * thr = list_entry(ele, struct thread, elem);
+    if (ticks >= thr->wakeup_ticks)
+    {
+      ele = list_remove(&thr->elem);
+      thread_unblock(thr);
+    }
+    else {
+      ele = list_next(ele);
+      update_wakeup_ticks(ticks);
+    }
+  }
+}
+
+void
+thread_sleep (int64_t ticks)
+{
+  /* if the current thread is not idle thread, change the
+   * state of the caller thread to BLOCKED,
+   * store the local tick to wake up,
+   * update the global tick if necessary,
+   * and call schedule() */
+
+  struct thread *cur = thread_current ();
+  enum intr_level old_level;
+
+  ASSERT (!intr_context ());
+
+  old_level = intr_disable ();
+  /* current thread != idle thread
+   * means */
+  if (cur != idle_thread)
+    cur->status = THREAD_BLOCKED;
+    cur->wakeup_ticks = ticks;
+    list_push_back (&sleep_list, &cur->elem);
+    update_wakeup_ticks(ticks);
+//  cur->status = THREAD_READY;
+  schedule ();
+  intr_set_level (old_level);
+
 }
 
 /* Yields the CPU.  The current thread is not put to sleep and

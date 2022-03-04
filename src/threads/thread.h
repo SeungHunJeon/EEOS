@@ -89,7 +89,7 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
-
+    int64_t wakeup_ticks;                        /* tick till wake up */
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -110,9 +110,13 @@ extern bool thread_report_latency;
 
 void thread_init (void);
 void thread_start (void);
-
+void thread_sleep (int64_t ticks);
+void thread_awake (int64_t ticks);
 void thread_tick (void);
 void thread_print_stats (void);
+
+void update_wakeup_ticks(int64_t wakeup_ticks);
+int64_t get_wakeup_ticks(void);
 
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
