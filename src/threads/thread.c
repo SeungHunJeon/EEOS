@@ -424,11 +424,19 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  thread_current ()->original_priority = new_priority;
 //  ASSERT (&ready_list != NULL);
 //  list_sort(&ready_list, &cmp_priority, NULL);
   if (!list_empty(&ready_list) && thread_current ()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
     thread_yield();
 }
+
+void
+sort_ready_list (void)
+{
+  list_sort(&ready_list, &cmp_priority, NULL);
+}
+
 
 /* Returns the current thread's priority. */
 int
@@ -554,6 +562,7 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->original_priority = priority;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();

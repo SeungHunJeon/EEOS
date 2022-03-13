@@ -185,6 +185,7 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
+  lock->pre_priority = -1;
   sema_init (&lock->semaphore, 1);
 }
 
@@ -203,8 +204,20 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+//  thread_current ()->priority = list_entry(list_begin(&(lock->semaphore.waiters)), struct thread, elem)->priority;
+  if (lock->holder != NULL && (lock->holder->priority < thread_current ()->priority))
+  {
+//    lock->holder->original_priority = lock->holder->priority;
+    if(lock->pre_priority == -1)
+      lock->pre_priority = lock->holder->priority;
+    lock->holder->priority = thread_current ()->priority;
+    sort_ready_list ();
+    thread_yield ();
+  }
+
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
+//  thread_current ()->priority = list_entry(list_begin(&(lock->semaphore.waiters)), struct thread, elem)->priority;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -238,6 +251,10 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+
+  if (lock->pre_priority != -1)
+    lock->holder->priority = lock->pre_priority;
+  lock->pre_priority = -1;
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
@@ -281,7 +298,7 @@ cmp_sema_priority (struct list_elem *ele, struct list_elem *e, void *aux)
    * cmp_priority is for wait_list or ready_list which constructed with list_element
    * that directly maps into each threads.
    *
-   * However, Condition waiters hierarchically maps into waiter*/
+   * However, Condition waiters hierarchically maps into waiter double times.*/
   return list_entry(list_begin(&(list_entry(ele, struct semaphore_elem, elem)->semaphore.waiters)), struct thread, elem)->priority
       > list_entry(list_begin(&(list_entry(e, struct semaphore_elem, elem)->semaphore.waiters)), struct thread, elem)->priority;
 }
