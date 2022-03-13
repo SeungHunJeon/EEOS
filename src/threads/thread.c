@@ -76,7 +76,6 @@ static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
-static int64_t min_wakeup_ticks = INT64_MAX;
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
@@ -213,6 +212,11 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /* compare the priorities of the currently running thread and the newly inserted one.
+   * Yield the CPU if the newly arriving thread has higher priority */
+  if (thread_get_priority() < t->priority)
+    thread_yield();
+
   return tid;
 }
 
@@ -249,7 +253,12 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+//  list_push_back (&ready_list, &t->elem);
+
+/* To consider the priority, insert the current thread into ready list with respect to
+ * priority order rather than push back*/
+  list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
+
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -308,34 +317,25 @@ thread_exit (void)
   NOT_REACHED ();
 }
 
-void update_wakeup_ticks(int64_t wakeup_ticks)
-{
-  if (min_wakeup_ticks > wakeup_ticks)
-    min_wakeup_ticks = wakeup_ticks;
-}
-
-int64_t get_wakeup_ticks(void)
-{
-  return min_wakeup_ticks;
-}
-
 void
 thread_awake (int64_t ticks)
 {
-  min_wakeup_ticks = INT64_MAX;
   struct list_elem *ele = list_begin(&sleep_list);
-//  ele = list_begin(&sleep_list);
+
+  /* check all the element in sleep_list & find the deprecated
+   * element, remove */
   while (ele != list_end(&sleep_list))
   {
     struct thread * thr = list_entry(ele, struct thread, elem);
     if (ticks >= thr->wakeup_ticks)
     {
       ele = list_remove(&thr->elem);
-      thread_unblock(thr);
+      thread_unblock(thr); /* Can be executable, state -> THREAD_READY,
+ * put into ready_list*/
     }
+    /* pass the now sleeping thread & update min_wakeup_ticks */
     else {
       ele = list_next(ele);
-      update_wakeup_ticks(thr->wakeup_ticks);
     }
   }
 }
@@ -357,11 +357,11 @@ thread_sleep (int64_t ticks)
   old_level = intr_disable ();
   /* current thread != idle thread
    * means */
-  if (cur != idle_thread){
-    cur->wakeup_ticks = ticks;
-    update_wakeup_ticks(ticks);
-    list_push_back (&sleep_list, &cur->elem);
-  }
+  ASSERT(cur != idle_thread);
+
+  cur->wakeup_ticks = ticks;
+  list_push_back (&sleep_list, &cur->elem);
+
 //    cur->status = THREAD_BLOCKED;
 
   thread_block();
@@ -370,6 +370,12 @@ thread_sleep (int64_t ticks)
 //  schedule ();
   intr_set_level (old_level);
 
+}
+
+bool
+cmp_priority(struct list_elem* ele, struct list_elem* e, void* aux)
+{
+  return list_entry(ele, struct thread, elem)->priority > list_entry(e, struct thread, elem)->priority;
 }
 
 /* Yields the CPU.  The current thread is not put to sleep and
@@ -383,8 +389,14 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+  if (cur != idle_thread)
+    list_insert_ordered(&ready_list, &cur->elem, cmp_priority, NULL);
+//    list_push_back (&ready_list, &cur->elem);
+
+    /* To consider the priority, insert the current thread into ready list with respect to
+ * priority order rather than push back*/
+
+
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -412,6 +424,10 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+//  ASSERT (&ready_list != NULL);
+//  list_sort(&ready_list, &cmp_priority, NULL);
+  if (!list_empty(&ready_list) && thread_current ()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
+    thread_yield();
 }
 
 /* Returns the current thread's priority. */

@@ -115,9 +115,6 @@ void thread_awake (int64_t ticks);
 void thread_tick (void);
 void thread_print_stats (void);
 
-void update_wakeup_ticks(int64_t wakeup_ticks);
-int64_t get_wakeup_ticks(void);
-
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
@@ -129,6 +126,7 @@ tid_t thread_tid (void);
 const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
+bool cmp_priority(struct list_elem *ele, struct list_elem *e, void *aux);
 void thread_yield (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */

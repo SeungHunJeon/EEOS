@@ -98,7 +98,8 @@ timer_sleep (int64_t ticks)
 //    thread_yield ();
 
   /* New implemented sleep code */
-  thread_sleep(start + ticks);
+  if (timer_elapsed(start) < ticks)
+    thread_sleep(start + ticks);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -185,8 +186,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
    * update the global tick
    */
 
-  if (ticks >= get_wakeup_ticks())
-    thread_awake(ticks);
+  thread_awake(ticks);
 
 }
 
