@@ -209,18 +209,22 @@ lock_acquire (struct lock *lock)
   if (lock->holder != NULL)
   {
     cur->wait_on_lock = lock;
-    list_push_back(&lock->holder->donations, &cur->d_elem);
-
-    // for nested 
-    struct lock *wait = lock;
-    while (wait != NULL)
+    if (thread_mlfqs == false)
     {
-      if(wait->holder->priority < cur->priority)
+      list_push_back(&lock->holder->donations, &cur->d_elem);
+
+      // for nested 
+      struct lock *wait = lock;
+      while (wait != NULL)
       {
-        wait->holder->priority = cur->priority;
-        wait = wait->holder->wait_on_lock;
-      }
-    }   
+        if(wait->holder->priority < cur->priority)
+        {
+          wait->holder->priority = cur->priority;
+          wait = wait->holder->wait_on_lock;
+        }
+      }   
+    }
+
   }
   // after get lock
   sema_down (&lock->semaphore);
@@ -265,25 +269,30 @@ lock_release (struct lock *lock)
   lock->holder = NULL;
   cur->priority = cur->original_priority;
 
-  struct list_elem *e = list_begin(&cur->donations);
-  
-  for (e = list_begin (&cur->donations); e != list_end (&cur->donations); e = list_next(e))
+  if (thread_mlfqs == false)
   {
-    struct thread *donor = list_entry(e, struct thread, d_elem);
-
-    if (donor->wait_on_lock == lock)
+    struct list_elem *e = list_begin(&cur->donations);
+    
+    for (e = list_begin (&cur->donations); e != list_end (&cur->donations); e = list_next(e))
     {
-      // printf("Remove\n");
-      list_remove(&donor->d_elem);
+      struct thread *donor = list_entry(e, struct thread, d_elem);
 
+      if (donor->wait_on_lock == lock)
+      {
+        // printf("Remove\n");
+        list_remove(&donor->d_elem);
+
+      }
+    }
+    
+    if (!list_empty(&cur->donations))
+    {
+      struct thread *new_donor = list_entry(list_max(&cur->donations, cmp_priority, NULL), struct thread, d_elem);
+      if(new_donor->priority > cur->priority) cur->priority = new_donor->priority;
     }
   }
-  
-  if (!list_empty(&cur->donations))
-  {
-    struct thread *new_donor = list_entry(list_max(&cur->donations, cmp_priority, NULL), struct thread, d_elem);
-    if(new_donor->priority > cur->priority) cur->priority = new_donor->priority;
-  }
+
+
 
   sema_up (&lock->semaphore);
 }

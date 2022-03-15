@@ -57,6 +57,7 @@ static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
+static int load_avg = 0;
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
@@ -64,7 +65,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
-bool thread_mlfqs;
+bool thread_mlfqs = false;
 bool thread_report_latency;
 
 static void kernel_thread (thread_func *, void *aux);
@@ -428,23 +429,27 @@ thread_set_priority (int new_priority)
   thread_current ()->priority = new_priority;
   thread_current ()->original_priority = new_priority;
 
-  struct lock *wait = thread_current()->wait_on_lock;
+  if (thread_mlfqs == false)
+  {
+    struct lock *wait = thread_current()->wait_on_lock;
 
-  if (!list_empty(&thread_current()->donations))
-  {
-    struct thread *new_donor = list_entry(list_max(&thread_current()->donations, cmp_priority, NULL), struct thread, d_elem);
-    if(new_priority < new_donor->priority) thread_current()->priority = new_donor->priority;
-  }
-  
-  while (wait != NULL)
-  {
-    if(wait->holder->priority < new_priority)
+    if (!list_empty(&thread_current()->donations))
     {
-      wait->holder->original_priority = wait->holder->priority;
-      wait->holder->priority = new_priority;
-      wait = wait->holder->wait_on_lock;
+      struct thread *new_donor = list_entry(list_max(&thread_current()->donations, cmp_priority, NULL), struct thread, d_elem);
+      if(new_priority < new_donor->priority) thread_current()->priority = new_donor->priority;
+    }
+
+    while (wait != NULL)
+    {
+      if(wait->holder->priority < new_priority)
+      {
+        wait->holder->original_priority = wait->holder->priority;
+        wait->holder->priority = new_priority;
+        wait = wait->holder->wait_on_lock;
+      }
     }
   }
+
 
   if (!list_empty(&ready_list) && thread_current ()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
     thread_yield();
@@ -457,6 +462,36 @@ sort_ready_list (void)
   list_sort(&ready_list, &cmp_priority, NULL);
 }
 
+// priority, nice, ready_thrads integer
+// recent_cpu, load_avg are real number
+void calculate_priority(struct thread *t)
+{
+  // floating point 
+  int f = 2**14;
+  t->priority = 63*f - (t->recent_cpu/4) - (t->nice*2);
+  t->priority = t->priority / f;
+  // t->priority = 63 - (t->recent_cpu/4) - (t->nice*2);
+
+}
+void calculate_recent_cpu(struct thread *t)
+{
+  // floating point
+  int f = 2**14;
+  int decay = (2*(int64_t)load_average)*f / (2*load_average+1) // division of two flt pt
+  t->recent_cpu = decay * t->recent_cpu + nice;
+}
+void calculate_load_avg(void)
+{
+
+}
+void increase_recent_cpu(void)
+{
+
+}
+void recalculate_threads(void)
+{
+
+}
 
 /* Returns the current thread's priority. */
 int
@@ -469,6 +504,7 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice UNUSED) 
 {
+  thread_mlfqs = true;
   /* Not yet implemented. */
 }
 
@@ -477,7 +513,8 @@ int
 thread_get_nice (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  struct thread *cur = thread_current();
+  return cur->nice;
 }
 
 /* Returns 100 times the system load average. */
@@ -485,6 +522,7 @@ int
 thread_get_load_avg (void) 
 {
   /* Not yet implemented. */
+  // return load avg 
   return 0;
 }
 
@@ -493,6 +531,7 @@ int
 thread_get_recent_cpu (void) 
 {
   /* Not yet implemented. */
+  // return recent cpu
   return 0;
 }
 
@@ -594,7 +633,10 @@ init_thread (struct thread *t, const char *name, int priority)
   // printf("push");
   t->wait_on_lock = NULL;
   // sema_init (&t->wait_on_lock->semaphore, 1);
+  t->nice = 0;
+  t->recent_cpu = 0;
 }
+
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
    returns a pointer to the frame's base. */

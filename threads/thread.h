@@ -105,8 +105,16 @@ struct thread
     struct list donations;
     struct lock *wait_on_lock;
     struct list_elem d_elem;
+
+    int nice;
+    int recent_cpu;
   };
 
+void calculate_priority(struct thread *t);
+void calculate_recent_cpu(struct thread *t);
+void calculate_load_avg(void);
+void increase_recent_cpu(void);
+void recalculate_threads(void);
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
