@@ -185,8 +185,28 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
-  lock->pre_priority = -1;
   sema_init (&lock->semaphore, 1);
+}
+
+
+
+bool
+cmp_donate_priority(struct list_elem* ele, struct list_elem* e, void* aux)
+{
+  return list_entry(ele, struct thread, donation_elem)->priority > list_entry(e, struct thread, donation_elem)->priority;
+}
+
+void
+donate_priority(void)
+{
+  struct thread *cur_thread = thread_current ();
+  while (cur_thread -> wait_on_lock != NULL)
+{
+    struct thread *chained_thread = cur_thread->wait_on_lock->holder;
+    if(chained_thread->priority < cur_thread->priority)
+      chained_thread->priority = cur_thread->priority;
+    cur_thread = chained_thread;
+}
 }
 
 /* Acquires LOCK, sleeping until it becomes available if
@@ -205,17 +225,16 @@ lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
 //  thread_current ()->priority = list_entry(list_begin(&(lock->semaphore.waiters)), struct thread, elem)->priority;
-  if (lock->holder != NULL && (lock->holder->priority < thread_current ()->priority))
+  if (lock->holder != NULL)
   {
-//    lock->holder->original_priority = lock->holder->priority;
-    if(lock->pre_priority == -1)
-      lock->pre_priority = lock->holder->priority;
-    lock->holder->priority = thread_current ()->priority;
-    sort_ready_list ();
-    thread_yield ();
+    thread_current ()->wait_on_lock= lock;
+    list_push_back(&lock->holder->donations, &thread_current()->donation_elem);
+    donate_priority();
+
   }
 
   sema_down (&lock->semaphore);
+  thread_current ()->wait_on_lock = NULL;
   lock->holder = thread_current ();
 //  thread_current ()->priority = list_entry(list_begin(&(lock->semaphore.waiters)), struct thread, elem)->priority;
 }
@@ -240,6 +259,35 @@ lock_try_acquire (struct lock *lock)
   return success;
 }
 
+void remove_with_lock(struct lock *lock)
+{
+  struct list_elem *e;
+  for (e = list_begin(&thread_current ()->donations);
+       e != list_end(&thread_current ()->donations);
+       e = list_next(e))
+  {
+    if (list_entry(e, struct thread, donation_elem)->wait_on_lock == lock)
+      list_remove(e);
+  }
+
+
+}
+
+void refresh_priority(void)
+{
+  thread_current ()->priority = thread_current ()->original_priority;
+  if (!list_empty(&thread_current ()->donations))
+  {
+    int donations_max_priority =
+        list_entry(list_max(&thread_current ()->donations, &cmp_priority, NULL),
+    struct thread, donation_elem)->priority;
+    if(donations_max_priority > thread_current ()->priority)
+    {
+      thread_current ()->priority = donations_max_priority;
+    }
+  }
+}
+
 /* Releases LOCK, which must be owned by the current thread.
 
    An interrupt handler cannot acquire a lock, so it does not
@@ -252,10 +300,11 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
 
-  if (lock->pre_priority != -1)
-    lock->holder->priority = lock->pre_priority;
-  lock->pre_priority = -1;
   lock->holder = NULL;
+
+  remove_with_lock(lock);
+  refresh_priority();
+
   sema_up (&lock->semaphore);
 }
 

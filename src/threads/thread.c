@@ -425,8 +425,10 @@ thread_set_priority (int new_priority)
 {
   thread_current ()->priority = new_priority;
   thread_current ()->original_priority = new_priority;
-//  ASSERT (&ready_list != NULL);
-//  list_sort(&ready_list, &cmp_priority, NULL);
+
+  refresh_priority();
+
+
   if (!list_empty(&ready_list) && thread_current ()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
     thread_yield();
 }
@@ -564,6 +566,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->original_priority = priority;
   t->magic = THREAD_MAGIC;
+  list_init(&t->donations);
+  t->wait_on_lock = NULL;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
