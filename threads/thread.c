@@ -57,7 +57,7 @@ static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
-static int load_avg = 0;
+static int load_average = 0;
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
@@ -467,48 +467,61 @@ sort_ready_list (void)
 void calculate_priority(struct thread *t)
 {
   // floating point 
-  int f = 2**14;
-  t->priority = 63*f - (t->recent_cpu/4) - (t->nice*2);
-  t->priority = t->priority / f;
-  // t->priority = 63 - (t->recent_cpu/4) - (t->nice*2);
-
+  int f = 2<<14;
+  if (t!=idle_thread)
+  {
+    t->priority = 63*f - (t->recent_cpu/4) - (t->nice*2);
+    t->priority = t->priority / f;
+  }
 }
+
 void calculate_recent_cpu(struct thread *t)
 {
   // floating point
-  int f = 2**14;
-  int decay = (2*(int64_t)load_average)*f / (2*load_average+f) // division of two flt pt
-  t->recent_cpu = (int64_t)decay * t->recent_cpu + nice*f;
+  int f = 2<<14;
+  int decay = (2*(int64_t)load_average)*f / (2*load_average+f); // division of two flt pt
+  if (t!=idle_thread) t->recent_cpu = (int64_t)decay * t->recent_cpu + t->nice*f;
 }
 void calculate_load_avg(void)
 {
-  int f = 2**14;
+  int f = 2<<14;
   int ready_threads = 0;
+  struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
   {
     struct thread *t = list_entry(e, struct thread, elem);
-    if ((t->status == THREAD_RUNNING) || (t->status == THREAD_READY) && (t!=idle_thread)) ready_threads ++;
+    if (((t->status == THREAD_RUNNING) || (t->status == THREAD_READY)) && (t!=idle_thread)) ready_threads ++;
   }
-
   load_average = ((int64_t)(59/60*f)*load_average)/f + ready_threads * f * 1/60;
+
 }
 void increase_recent_cpu(void)
 {
-  int f = 2**14;
+  int f = 2<<14;
+  struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
   {
     struct thread *t = list_entry(e, struct thread, elem);
     if ((t->status == THREAD_RUNNING) && (t!=idle_thread)) t->recent_cpu = t->recent_cpu + f;
   }
 }
-void recalculate_threads(void)
+void recalculate_threads_priority(void)
 {
   struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
   {
     struct thread *t = list_entry(e, struct thread, elem);
-    calculate_priority(t);
-    calculate_recent_cpu(t);
+    if (t!=idle_thread) calculate_priority(t);
+  }
+}
+
+void recalculate_threads_recent_cpu(void)
+{
+  struct list_elem *e;
+  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
+  {
+    struct thread *t = list_entry(e, struct thread, elem);
+    if (t!=idle_thread) calculate_recent_cpu(t);
   }
 }
 
@@ -516,6 +529,7 @@ void recalculate_threads(void)
 int
 thread_get_priority (void) 
 {
+  // intr_disable ();
   return thread_current ()->priority;
 }
 
@@ -523,7 +537,9 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice UNUSED) 
 {
-  thread_mlfqs = true;
+  // intr_disable ();
+  struct thread *cur = thread_current();
+  cur->nice = nice;
   /* Not yet implemented. */
 }
 
@@ -531,27 +547,37 @@ thread_set_nice (int nice UNUSED)
 int
 thread_get_nice (void) 
 {
+  // intr_disable ();
   /* Not yet implemented. */
   struct thread *cur = thread_current();
   return cur->nice;
+  
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
+  // intr_disable ();
   /* Not yet implemented. */
   // return load avg 
-  return 0;
+  int f = 2<<14;
+  int load_avg = (100 * ((load_average+f)/2)) / f;
+  if (load_avg>50) printf("load avg: %d\n", load_avg);
+  return load_avg;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
+  // intr_disable ();
   /* Not yet implemented. */
   // return recent cpu
-  return 0;
+  int f = 2<<14;
+  struct thread *cur = thread_current();
+  int recent_cpu = (100 * ((cur->recent_cpu+f)/2)) / f;
+  return recent_cpu;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.

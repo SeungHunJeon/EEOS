@@ -179,18 +179,16 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   thread_tick ();
 
-  // recalculate load avg and recent cpu of all threads
-  if (ticks%4==0)
+  // recalculate load avg and recent cpu of all threads'
+  if (thread_mlfqs == true)
   {
-    // recalculate priority of all threads
+    increase_recent_cpu();
+    
+    if(ticks  % TIMER_FREQ == 0) recalculate_threads_recent_cpu();
+    if(ticks % TIMER_FREQ == 0) calculate_load_avg();
+    
+    if (ticks%4==0) recalculate_threads_priority();
   }
-
-  /* code to add :
-   * check sleep list and the global tick
-   * find any threads to wake up
-   * move them to the ready list if necessary
-   * update the global tick
-   */
 
   thread_awake(ticks);
 
