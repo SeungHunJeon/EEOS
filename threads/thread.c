@@ -473,6 +473,7 @@ void calculate_priority(struct thread *t)
   intr_set_level(old_level);
 }
 
+// int time = 0;
 void calculate_recent_cpu(struct thread *t)
 {
   // floating point
@@ -485,6 +486,7 @@ void calculate_recent_cpu(struct thread *t)
   if (t!=idle_thread) 
   {
     // printf("original recent cpu: %d\n", t->recent_cpu >> 14);
+    // time++;
     t->recent_cpu = (((int64_t)(t->recent_cpu)) * decay) >> 14;
     t->recent_cpu += f * t->nice;
     // printf("recent cpu: %d\n", t->recent_cpu >> 14);
@@ -576,7 +578,7 @@ thread_set_nice (int nice UNUSED)
   // intr_disable ();
   enum intr_level old_level = intr_disable();
   struct thread *cur = thread_current();
-  cur->nice = nice;
+  if (cur!=idle_thread) cur->nice = nice;
   intr_set_level(old_level);
   /* Not yet implemented. */
 }
@@ -614,8 +616,9 @@ thread_get_recent_cpu (void)
   // printf("get recent cpu\n");
   enum intr_level old_level = intr_disable();
   int f = 1<<14;
+  int recent_cpu = 0;
   struct thread *cur = thread_current();
-  int recent_cpu = (100 * cur->recent_cpu) / f;
+  if (cur!=idle_thread) recent_cpu = (100 * cur->recent_cpu) / f;
   intr_set_level(old_level);
   return recent_cpu;
 }
