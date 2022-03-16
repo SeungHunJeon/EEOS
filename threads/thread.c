@@ -467,62 +467,96 @@ sort_ready_list (void)
 void calculate_priority(struct thread *t)
 {
   // floating point 
-  int f = 2<<14;
-  if (t!=idle_thread)
-  {
-    t->priority = 63*f - (t->recent_cpu/4) - (t->nice*2);
-    t->priority = t->priority / f;
-  }
+  enum intr_level old_level = intr_disable();
+  int f = 1<<14;
+  if (t!=idle_thread) t->priority = 63 - ((t->recent_cpu/4)>>14) - (t->nice*2);
+  intr_set_level(old_level);
 }
 
 void calculate_recent_cpu(struct thread *t)
 {
   // floating point
-  int f = 2<<14;
-  int decay = (2*(int64_t)load_average)*f / (2*load_average+f); // division of two flt pt
-  if (t!=idle_thread) t->recent_cpu = (int64_t)decay * t->recent_cpu + t->nice*f;
+  enum intr_level old_level = intr_disable();
+  int f = 1<<14;
+  // printf("load avg: %d\n", load_average * 100 >> 14);
+  int decay = 2*(((int64_t)(load_average)) << 14) / (2*load_average+f);
+  // printf("decay: %d\n", decay * 100 >> 14);
+  // printf("original recent cpu: %d\n", t->recent_cpu >> 14);
+  if (t!=idle_thread) 
+  {
+    // printf("original recent cpu: %d\n", t->recent_cpu >> 14);
+    t->recent_cpu = (((int64_t)(t->recent_cpu)) * decay) >> 14;
+    t->recent_cpu += f * t->nice;
+    // printf("recent cpu: %d\n", t->recent_cpu >> 14);
+  }
+  intr_set_level(old_level);
 }
+
 void calculate_load_avg(void)
 {
-  int f = 2<<14;
-  int ready_threads = 0;
-  struct list_elem *e;
-  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
-  {
-    struct thread *t = list_entry(e, struct thread, elem);
-    if (((t->status == THREAD_RUNNING) || (t->status == THREAD_READY)) && (t!=idle_thread)) ready_threads ++;
-  }
-  load_average = ((int64_t)(59/60*f)*load_average)/f + ready_threads * f * 1/60;
+  enum intr_level old_level = intr_disable();
+  int f = 1<<14;
+  int ready_threads = list_size(&ready_list);
+  if (thread_current()!=idle_thread) ready_threads+=1;
+
+  // struct list_elem *e;
+  
+  // for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
+  // {
+  //   struct thread *t = list_entry(e, struct thread, elem);
+  //   if (((t->status == THREAD_RUNNING) || (t->status == THREAD_READY)) && (t!=idle_thread)) ready_threads ++;
+  // }
+
+  load_average = ((59*load_average)/60) + (ready_threads << 14)/60;
+  intr_set_level(old_level);
 
 }
 void increase_recent_cpu(void)
 {
-  int f = 2<<14;
-  struct list_elem *e;
-  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
-  {
-    struct thread *t = list_entry(e, struct thread, elem);
-    if ((t->status == THREAD_RUNNING) && (t!=idle_thread)) t->recent_cpu = t->recent_cpu + f;
-  }
+  enum intr_level old_level = intr_disable();
+  int f = 1<<14;
+
+  // struct list_elem *e;
+  // for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
+  // {
+  //   struct thread *t = list_entry(e, struct thread, elem);
+  //   if ((t->status == THREAD_RUNNING) && (t!=idle_thread)) 
+  //   {
+  //     printf("recent cpu by +1: %d\n", t->recent_cpu >> 14);
+  //     t->recent_cpu = t->recent_cpu + f;
+  //   }
+  // }
+
+  struct thread *cur = thread_current();
+  if (cur != idle_thread) cur->recent_cpu += f;
+  intr_set_level(old_level);
+  
 }
 void recalculate_threads_priority(void)
 {
+  enum intr_level old_level = intr_disable();
   struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
   {
     struct thread *t = list_entry(e, struct thread, elem);
-    if (t!=idle_thread) calculate_priority(t);
+    if (t!=idle_thread) 
+    {
+      calculate_priority(t);
+    }
   }
+  intr_set_level(old_level);
 }
 
 void recalculate_threads_recent_cpu(void)
 {
+  enum intr_level old_level = intr_disable();
   struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
   {
     struct thread *t = list_entry(e, struct thread, elem);
     if (t!=idle_thread) calculate_recent_cpu(t);
   }
+  intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -530,6 +564,7 @@ int
 thread_get_priority (void) 
 {
   // intr_disable ();
+  // printf("get priority\n");
   return thread_current ()->priority;
 }
 
@@ -537,9 +572,12 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice UNUSED) 
 {
+  // printf("set nice\n");
   // intr_disable ();
+  enum intr_level old_level = intr_disable();
   struct thread *cur = thread_current();
   cur->nice = nice;
+  intr_set_level(old_level);
   /* Not yet implemented. */
 }
 
@@ -547,9 +585,9 @@ thread_set_nice (int nice UNUSED)
 int
 thread_get_nice (void) 
 {
-  // intr_disable ();
-  /* Not yet implemented. */
+  enum intr_level old_level = intr_disable();
   struct thread *cur = thread_current();
+  intr_set_level(old_level);
   return cur->nice;
   
 }
@@ -558,12 +596,11 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  // intr_disable ();
-  /* Not yet implemented. */
-  // return load avg 
-  int f = 2<<14;
-  int load_avg = (100 * ((load_average+f)/2)) / f;
-  if (load_avg>50) printf("load avg: %d\n", load_avg);
+  enum intr_level old_level = intr_disable();
+
+  int load_avg = (100 * load_average) >> 14;
+
+  intr_set_level(old_level);
   return load_avg;
 }
 
@@ -574,9 +611,12 @@ thread_get_recent_cpu (void)
   // intr_disable ();
   /* Not yet implemented. */
   // return recent cpu
-  int f = 2<<14;
+  // printf("get recent cpu\n");
+  enum intr_level old_level = intr_disable();
+  int f = 1<<14;
   struct thread *cur = thread_current();
-  int recent_cpu = (100 * ((cur->recent_cpu+f)/2)) / f;
+  int recent_cpu = (100 * cur->recent_cpu) / f;
+  intr_set_level(old_level);
   return recent_cpu;
 }
 
