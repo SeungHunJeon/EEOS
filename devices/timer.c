@@ -188,6 +188,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
     if(ticks % TIMER_FREQ == 0) recalculate_threads_priority();
     
     if (ticks%4==0) calculate_priority(thread_current());
+    
   }
 
   thread_awake(ticks);
