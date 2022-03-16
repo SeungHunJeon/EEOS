@@ -477,20 +477,39 @@ void calculate_recent_cpu(struct thread *t)
 {
   // floating point
   int f = 2**14;
-  int decay = (2*(int64_t)load_average)*f / (2*load_average+1) // division of two flt pt
-  t->recent_cpu = decay * t->recent_cpu + nice;
+  int decay = (2*(int64_t)load_average)*f / (2*load_average+f) // division of two flt pt
+  t->recent_cpu = (int64_t)decay * t->recent_cpu + nice*f;
 }
 void calculate_load_avg(void)
 {
+  int f = 2**14;
+  int ready_threads = 0;
+  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
+  {
+    struct thread *t = list_entry(e, struct thread, elem);
+    if ((t->status == THREAD_RUNNING) || (t->status == THREAD_READY) && (t!=idle_thread)) ready_threads ++;
+  }
 
+  load_average = ((int64_t)(59/60*f)*load_average)/f + ready_threads * f * 1/60;
 }
 void increase_recent_cpu(void)
 {
-
+  int f = 2**14;
+  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
+  {
+    struct thread *t = list_entry(e, struct thread, elem);
+    if ((t->status == THREAD_RUNNING) && (t!=idle_thread)) t->recent_cpu = t->recent_cpu + f;
+  }
 }
 void recalculate_threads(void)
 {
-
+  struct list_elem *e;
+  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
+  {
+    struct thread *t = list_entry(e, struct thread, elem);
+    calculate_priority(t);
+    calculate_recent_cpu(t);
+  }
 }
 
 /* Returns the current thread's priority. */
