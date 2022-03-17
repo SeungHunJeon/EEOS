@@ -146,6 +146,7 @@ test_mlfqs_load_avg (void)
       int64_t sleep_until = start_time + TIMER_FREQ * (2 * i + 10);
       int load_avg;
       timer_sleep (sleep_until - timer_ticks ());
+      msg("sleep time %d", sleep_until - timer_ticks ());
       load_avg = thread_get_load_avg ();
       msg ("After %d seconds, load average=%d.%02d.",
            i * 2, load_avg / 100, load_avg % 100);

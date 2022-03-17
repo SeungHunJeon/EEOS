@@ -186,7 +186,18 @@ timer_interrupt (struct intr_frame *args UNUSED)
    * update the global tick
    */
 
-  thread_awake(ticks);
+  if (thread_mlfqs)
+  {
+    mlfqs_increment();
+    if (ticks % TIMER_FREQ == 0)
+      mlfqs_recalc();
+    if (ticks % 4 == 0)
+      mlfqs_priority(thread_current());
+
+  }
+
+
+  thread_awake (ticks);
 
 }
 
