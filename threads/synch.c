@@ -205,7 +205,8 @@ lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
   struct thread *cur = thread_current();
-  struct list_elem *e;
+  // struct list_elem *e;
+
   if (lock->holder != NULL)
   {
     cur->wait_on_lock = lock;
@@ -224,7 +225,6 @@ lock_acquire (struct lock *lock)
         }
       }   
     }
-
   }
   // after get lock
   sema_down (&lock->semaphore);
@@ -291,8 +291,6 @@ lock_release (struct lock *lock)
       if(new_donor->priority > cur->priority) cur->priority = new_donor->priority;
     }
   }
-
-
 
   sema_up (&lock->semaphore);
 }

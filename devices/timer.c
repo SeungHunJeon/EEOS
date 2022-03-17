@@ -183,10 +183,11 @@ timer_interrupt (struct intr_frame *args UNUSED)
   {
     increase_recent_cpu();
     
+
     if(ticks % TIMER_FREQ == 0) calculate_load_avg();
     if(ticks  % TIMER_FREQ == 0) recalculate_threads_recent_cpu();
     if(ticks % TIMER_FREQ == 0) recalculate_threads_priority();
-    
+
     if (ticks%4==0) calculate_priority(thread_current());
     
   }

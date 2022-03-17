@@ -57,7 +57,7 @@ static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
-static int load_average = 0;
+static int load_average;
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
@@ -116,6 +116,8 @@ void
 thread_start (void) 
 {
   /* Create the idle thread. */
+
+  load_average = 0;
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
@@ -424,35 +426,35 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  if (thread_mlfqs == true) return;
+
   int original = thread_current()->priority;
 
   thread_current ()->priority = new_priority;
   thread_current ()->original_priority = new_priority;
 
-  if (thread_mlfqs == false)
+
+  struct lock *wait = thread_current()->wait_on_lock;
+
+  if (!list_empty(&thread_current()->donations))
   {
-    struct lock *wait = thread_current()->wait_on_lock;
-
-    if (!list_empty(&thread_current()->donations))
-    {
-      struct thread *new_donor = list_entry(list_max(&thread_current()->donations, cmp_priority, NULL), struct thread, d_elem);
-      if(new_priority < new_donor->priority) thread_current()->priority = new_donor->priority;
-    }
-
-    while (wait != NULL)
-    {
-      if(wait->holder->priority < new_priority)
-      {
-        wait->holder->original_priority = wait->holder->priority;
-        wait->holder->priority = new_priority;
-        wait = wait->holder->wait_on_lock;
-      }
-    }
+    struct thread *new_donor = list_entry(list_max(&thread_current()->donations, cmp_priority, NULL), struct thread, d_elem);
+    if(new_priority < new_donor->priority) thread_current()->priority = new_donor->priority;
   }
 
-
+  while (wait != NULL)
+  {
+    if(wait->holder->priority < new_priority)
+    {
+      wait->holder->original_priority = wait->holder->priority;
+      wait->holder->priority = new_priority;
+      wait = wait->holder->wait_on_lock;
+    }
+  }
+  
   if (!list_empty(&ready_list) && thread_current ()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
     thread_yield();
+
   // priority donation add
 }
 
@@ -467,17 +469,24 @@ sort_ready_list (void)
 void calculate_priority(struct thread *t)
 {
   // floating point 
-  enum intr_level old_level = intr_disable();
+  // enum intr_level old_level = intr_disable();
   int f = 1<<14;
-  if (t!=idle_thread) t->priority = 63 - ((t->recent_cpu/4)>>14) - (t->nice*2);
-  intr_set_level(old_level);
+  if (t!=idle_thread) 
+  {
+    int org = t->priority;
+    t->priority = 63 - ((t->recent_cpu/4)>>14) - (t->nice*2);
+    // printf("priority: %d = 63 - %d/4 - %d * 2\n", t->priority, t->recent_cpu >> 14, t->nice);
+    if (t->priority > 63) t->priority = 63;
+    if (t->priority < 0) t->priority = 0;  
+  }
+  // intr_set_level(old_level);
 }
 
 // int time = 0;
 void calculate_recent_cpu(struct thread *t)
 {
   // floating point
-  enum intr_level old_level = intr_disable();
+  // enum intr_level old_level = intr_disable();
   int f = 1<<14;
   // printf("load avg: %d\n", load_average * 100 >> 14);
   int decay = 2*(((int64_t)(load_average)) << 14) / (2*load_average+f);
@@ -488,55 +497,37 @@ void calculate_recent_cpu(struct thread *t)
     // printf("original recent cpu: %d\n", t->recent_cpu >> 14);
     // time++;
     t->recent_cpu = (((int64_t)(t->recent_cpu)) * decay) >> 14;
-    t->recent_cpu += f * t->nice;
-    // printf("recent cpu: %d\n", t->recent_cpu >> 14);
+    // printf("recent cpu before plus %d: %d\n", t->nice, t->recent_cpu>>14);
+    t->recent_cpu += t->nice << 14;
+    // printf("recent cpu after plus: %d\n", t->recent_cpu>>14);
   }
-  intr_set_level(old_level);
+  // intr_set_level(old_level);
 }
 
 void calculate_load_avg(void)
 {
-  enum intr_level old_level = intr_disable();
+  // enum intr_level old_level = intr_disable();
   int f = 1<<14;
   int ready_threads = list_size(&ready_list);
   if (thread_current()!=idle_thread) ready_threads+=1;
 
-  // struct list_elem *e;
-  
-  // for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
-  // {
-  //   struct thread *t = list_entry(e, struct thread, elem);
-  //   if (((t->status == THREAD_RUNNING) || (t->status == THREAD_READY)) && (t!=idle_thread)) ready_threads ++;
-  // }
-
   load_average = ((59*load_average)/60) + (ready_threads << 14)/60;
-  intr_set_level(old_level);
+  if (load_average < 0) load_average = 0;
+  
 
 }
 void increase_recent_cpu(void)
 {
-  enum intr_level old_level = intr_disable();
+  // enum intr_level old_level = intr_disable();
   int f = 1<<14;
-
-  // struct list_elem *e;
-  // for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
-  // {
-  //   struct thread *t = list_entry(e, struct thread, elem);
-  //   if ((t->status == THREAD_RUNNING) && (t!=idle_thread)) 
-  //   {
-  //     printf("recent cpu by +1: %d\n", t->recent_cpu >> 14);
-  //     t->recent_cpu = t->recent_cpu + f;
-  //   }
-  // }
 
   struct thread *cur = thread_current();
   if (cur != idle_thread) cur->recent_cpu += f;
-  intr_set_level(old_level);
   
 }
 void recalculate_threads_priority(void)
 {
-  enum intr_level old_level = intr_disable();
+  // enum intr_level old_level = intr_disable();
   struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
   {
@@ -546,19 +537,19 @@ void recalculate_threads_priority(void)
       calculate_priority(t);
     }
   }
-  intr_set_level(old_level);
+  // intr_set_level(old_level);
 }
 
 void recalculate_threads_recent_cpu(void)
 {
-  enum intr_level old_level = intr_disable();
+  // enum intr_level old_level = intr_disable();
   struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
   {
     struct thread *t = list_entry(e, struct thread, elem);
     if (t!=idle_thread) calculate_recent_cpu(t);
   }
-  intr_set_level(old_level);
+  // intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -567,18 +558,31 @@ thread_get_priority (void)
 {
   // intr_disable ();
   // printf("get priority\n");
-  return thread_current ()->priority;
+  enum intr_level old_level = intr_disable();
+  int priority = thread_current ()->priority;
+  intr_set_level(old_level);
+  return priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED) 
 {
-  // printf("set nice\n");
   // intr_disable ();
   enum intr_level old_level = intr_disable();
   struct thread *cur = thread_current();
-  if (cur!=idle_thread) cur->nice = nice;
+  cur->nice = nice;
+  if (cur!=idle_thread) 
+  {
+    // printf("set nice\n");
+    
+    calculate_priority(cur);
+    sort_ready_list();
+
+    if (!list_empty(&ready_list) && thread_current ()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
+      thread_yield();
+  }
+
   intr_set_level(old_level);
   /* Not yet implemented. */
 }
@@ -589,8 +593,9 @@ thread_get_nice (void)
 {
   enum intr_level old_level = intr_disable();
   struct thread *cur = thread_current();
+  int nice = cur->nice;
   intr_set_level(old_level);
-  return cur->nice;
+  return nice;
   
 }
 
@@ -618,7 +623,7 @@ thread_get_recent_cpu (void)
   int f = 1<<14;
   int recent_cpu = 0;
   struct thread *cur = thread_current();
-  if (cur!=idle_thread) recent_cpu = (100 * cur->recent_cpu) / f;
+  if (cur!=idle_thread) recent_cpu = (100 * cur->recent_cpu) >> 14;
   intr_set_level(old_level);
   return recent_cpu;
 }
