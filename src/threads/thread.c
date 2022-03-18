@@ -428,7 +428,7 @@ void mlfqs_recalc (void)
   mlfqs_load_avg();
   for (struct list_elem *e=list_begin(&all_list); e!=list_end(&all_list); e=list_next(e))
   {
-    struct thread *t = list_entry(e, struct thread, elem);
+    struct thread *t = list_entry(e, struct thread, allelem);
     mlfqs_recent_cpu(t);
     mlfqs_priority(t);
   }
@@ -487,7 +487,7 @@ thread_set_priority (int new_priority)
     refresh_priority();
 
     if (!list_empty(&ready_list) && thread_current ()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
-    thread_yield();
+      thread_yield();
   }
 
 }
