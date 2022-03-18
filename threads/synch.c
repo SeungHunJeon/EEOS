@@ -209,9 +209,9 @@ lock_acquire (struct lock *lock)
 
   if (lock->holder != NULL)
   {
-    cur->wait_on_lock = lock;
     if (thread_mlfqs == false)
     {
+      cur->wait_on_lock = lock;
       list_push_back(&lock->holder->donations, &cur->d_elem);
 
       // for nested 

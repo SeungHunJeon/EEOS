@@ -108,14 +108,17 @@ struct thread
 
     int nice;
     int recent_cpu;
+
+    int64_t thread_tick;
+    int start_cnt;
   };
 
 void calculate_priority(struct thread *t);
 void calculate_recent_cpu(struct thread *t);
 void calculate_load_avg(void);
 void increase_recent_cpu(void);
-void recalculate_threads_priority(void);
-void recalculate_threads_recent_cpu(void);
+void recalculate_threads_priority(bool);
+void count_latency(void);
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
@@ -126,6 +129,8 @@ void thread_init (void);
 void thread_start (void);
 void thread_sleep (int64_t ticks);
 void thread_awake (int64_t ticks);
+void update_global_tick(int64_t ticks);
+int64_t return_global(void);
 void thread_tick (void);
 void thread_print_stats (void);
 
@@ -141,6 +146,7 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 bool cmp_priority(struct list_elem *ele, struct list_elem *e, void *aux);
+bool cmp_tick(struct list_elem *ele, struct list_elem *e, void *aux);
 void thread_yield (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */

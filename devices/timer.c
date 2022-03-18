@@ -90,6 +90,7 @@ void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
+
   ASSERT (intr_get_level () == INTR_ON);
 
   /* Original loop structured sleep */
@@ -177,22 +178,16 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
-
+  // count_latency();
   // recalculate load avg and recent cpu of all threads'
   if (thread_mlfqs == true)
   {
     increase_recent_cpu();
-    
-
     if(ticks % TIMER_FREQ == 0) calculate_load_avg();
-    if(ticks  % TIMER_FREQ == 0) recalculate_threads_recent_cpu();
-    if(ticks % TIMER_FREQ == 0) recalculate_threads_priority();
-
-    if (ticks%4==0) calculate_priority(thread_current());
-    
+    if (ticks%4==0) recalculate_threads(ticks%TIMER_FREQ == 0);
   }
 
-  thread_awake(ticks);
+  if (return_global() <= ticks) thread_awake(ticks);
 
 }
 
