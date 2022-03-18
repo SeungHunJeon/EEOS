@@ -209,22 +209,20 @@ lock_acquire (struct lock *lock)
 
   if (lock->holder != NULL)
   {
-    if (thread_mlfqs == false)
-    {
       cur->wait_on_lock = lock;
       list_push_back(&lock->holder->donations, &cur->d_elem);
-
-      // for nested 
-      struct lock *wait = lock;
-      while (wait != NULL)
+      if (!thread_mlfqs)
       {
-        if(wait->holder->priority < cur->priority)
+        struct lock *wait = lock;
+        while (wait != NULL)
         {
-          wait->holder->priority = cur->priority;
-          wait = wait->holder->wait_on_lock;
-        }
+          if(wait->holder->priority < cur->priority)
+          {
+            wait->holder->priority = cur->priority;
+            wait = wait->holder->wait_on_lock;
+          }
+        }        
       }   
-    }
   }
   // after get lock
   sema_down (&lock->semaphore);
@@ -265,12 +263,14 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
   
-  struct thread *cur = thread_current();
+  
   lock->holder = NULL;
-  cur->priority = cur->original_priority;
+
 
   if (thread_mlfqs == false)
   {
+    struct thread *cur = thread_current();
+    cur->priority = cur->original_priority;
     struct list_elem *e = list_begin(&cur->donations);
     
     for (e = list_begin (&cur->donations); e != list_end (&cur->donations); e = list_next(e))

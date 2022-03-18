@@ -179,11 +179,10 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   thread_tick ();
   // count_latency();
-  // recalculate load avg and recent cpu of all threads'
+
   if (thread_mlfqs == true)
   {
     increase_recent_cpu();
-    if(ticks % TIMER_FREQ == 0) calculate_load_avg();
     if (ticks%4==0) recalculate_threads(ticks%TIMER_FREQ == 0);
   }
 
