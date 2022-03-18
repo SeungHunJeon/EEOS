@@ -328,7 +328,7 @@ thread_exit (void)
   intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current()->start_cnt = 0;
-  // printf("Thread %d completed in %d ticks\n", thread_current()->tid, thread_current()->thread_tick);
+  if (thread_report_latency) printf("Thread %d completed in %d ticks\n", thread_current()->tid, thread_current()->thread_tick);
   thread_current ()->status = THREAD_DYING;
   
   schedule ();
