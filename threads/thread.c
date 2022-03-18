@@ -229,7 +229,7 @@ count_latency(void)
   struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
   {
-    struct thread *t = list_entry(e, struct thread, elem);
+    struct thread *t = list_entry(e, struct thread, allelem);
     if(t->start_cnt == 1) t->thread_tick ++;
   }
 }
