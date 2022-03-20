@@ -94,6 +94,7 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -117,7 +118,7 @@ void calculate_priority(struct thread *t);
 void calculate_recent_cpu(struct thread *t);
 void calculate_load_avg(void);
 void increase_recent_cpu(void);
-void recalculate_threads(bool);
+void recalculate_threads(void);
 void count_latency(void);
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.

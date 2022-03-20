@@ -22,8 +22,9 @@
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
-static struct list ready_list;
-
+// static struct list ready_list;
+static struct list high_list;
+static struct list low_list;
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
@@ -99,7 +100,9 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  list_init (&ready_list);
+  // list_init (&ready_list);
+  list_init (&high_list);
+  list_init (&low_list);
   list_init (&all_list);
   list_init (&sleep_list);
 
@@ -271,7 +274,9 @@ thread_unblock (struct thread *t)
 /* To consider the priority, insert the current thread into ready list with respect to
  * priority order rather than push back*/
  
-  list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
+
+  if (t->priority > 31) list_insert_ordered(&high_list, &t->elem, cmp_priority, NULL);
+  else list_insert_ordered(&low_list, &t->elem, cmp_priority, NULL);
 
   t->status = THREAD_READY;
   t->start_cnt = 1;
@@ -361,7 +366,7 @@ thread_awake (int64_t ticks)
       /* pass the now sleeping thread & update min_wakeup_ticks */
       else {
         ele = list_next(ele);
-        update_global_tick(thr->wakeup_ticks);
+        if (global_tick > ticks ) global_tick = ticks;
       }
     } 
 }
@@ -429,7 +434,11 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread)
-    list_insert_ordered(&ready_list, &cur->elem, cmp_priority, NULL);
+  {
+    if (cur->priority > 31) list_insert_ordered (&high_list, &cur->elem, cmp_priority, NULL);
+    else list_insert_ordered (&low_list, &cur->elem, cmp_priority, NULL);
+  }
+    // list_insert_ordered(&ready_list, &cur->elem, cmp_priority, NULL);
 //    list_push_back (&ready_list, &cur->elem);
 
     /* To consider the priority, insert the current thread into ready list with respect to
@@ -468,8 +477,7 @@ thread_set_priority (int new_priority)
 
   thread_current ()->priority = new_priority;
   thread_current ()->original_priority = new_priority;
-
-
+  
   struct lock *wait = thread_current()->wait_on_lock;
 
   if (!list_empty(&thread_current()->donations))
@@ -477,7 +485,7 @@ thread_set_priority (int new_priority)
     struct thread *new_donor = list_entry(list_max(&thread_current()->donations, cmp_priority, NULL), struct thread, d_elem);
     if(new_priority < new_donor->priority) thread_current()->priority = new_donor->priority;
   }
-
+  
   while (wait != NULL)
   {
     if(wait->holder->priority < new_priority)
@@ -487,8 +495,20 @@ thread_set_priority (int new_priority)
       wait = wait->holder->wait_on_lock;
     }
   }
-  
-  if (!list_empty(&ready_list) && thread_current ()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority) thread_yield();
+  // if (!list_empty(&ready_list) && thread_current ()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority) thread_yield();
+  if (thread_current ()->priority > 31)
+  {
+    if (!list_empty(&high_list) && (thread_current()->priority < list_entry(list_front(&high_list), struct thread, elem)->priority)) thread_yield();
+  }
+
+  else
+  {
+    if(!list_empty(&high_list)) thread_yield();
+    else
+    {
+      if (!list_empty(&low_list) && (thread_current()->priority < list_entry(list_front(&low_list), struct thread, elem)->priority)) thread_yield();
+    }
+  }
 
   // priority donation add
 }
@@ -496,7 +516,8 @@ thread_set_priority (int new_priority)
 void
 sort_ready_list (void)
 {
-  list_sort(&ready_list, &cmp_priority, NULL);
+  list_sort(&high_list, cmp_priority, NULL);
+  list_sort(&low_list, cmp_priority, NULL);
 }
 
 // priority, nice, ready_thrads integer
@@ -507,12 +528,30 @@ void calculate_priority(struct thread *t)
 
   if (t==idle_thread) return;
 
+  int original = t->priority;
+
   t->priority = 63 - ((t->recent_cpu/4)/f) - (t->nice*2);
 
   if (t->priority > 63) t->priority = 63;
   if (t->priority < 0) t->priority = 0;  
+
+  int new_priority = t->priority;
+
+  if (t==thread_current()) return;
   
+  if (((new_priority > 31) && (original <= 31)) && t->status == THREAD_READY)
+  {
+    list_remove(&(t->elem));
+    list_insert_ordered(&high_list, &t->elem, cmp_priority, NULL);
+  }
+    
+  if (((original > 31) && (new_priority <= 31)) && t->status == THREAD_READY)
+  {
+    list_remove(&(t->elem));
+    list_insert_ordered(&low_list, &t->elem, cmp_priority, NULL);
+  }
 }
+  
 
 // int time = 0;
 void calculate_recent_cpu(struct thread *t)
@@ -525,7 +564,7 @@ void calculate_recent_cpu(struct thread *t)
 
 void calculate_load_avg(void)
 {
-  int ready_threads = list_size(&ready_list);
+  int ready_threads = list_size(&high_list) + list_size(&low_list);
   if (thread_current()!=idle_thread) ready_threads+=1;
 
   load_average = ((59*load_average)/60) + (ready_threads*f)/60;
@@ -536,17 +575,16 @@ void increase_recent_cpu(void)
   if (thread_current() != idle_thread) thread_current()->recent_cpu += f; 
 }
 
-void recalculate_threads(bool sec)
+void recalculate_threads()
 {
-  // enum intr_level old_level = intr_disable();
-  if (sec == true) calculate_load_avg();
+  calculate_load_avg();
   struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
   {
     struct thread *t = list_entry(e, struct thread, allelem);
     if (t!=idle_thread) 
     {
-      if (sec == true) calculate_recent_cpu(t);
+      calculate_recent_cpu(t);
       calculate_priority(t);
     }
   }
@@ -570,8 +608,19 @@ thread_set_nice (int nice UNUSED)
   calculate_priority(thread_current());
   sort_ready_list();
   
-  if (!list_empty(&ready_list) && thread_current ()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
-    thread_yield();
+  if (thread_current ()->priority > 31)
+  {
+    if (!list_empty(&high_list) && (thread_current()->priority < list_entry(list_front(&high_list), struct thread, elem)->priority)) thread_yield();
+  }
+
+  else
+  {
+    if(!list_empty(&high_list)) thread_yield();
+    else
+    {
+      if (!list_empty(&low_list) && (thread_current()->priority < list_entry(list_front(&low_list), struct thread, elem)->priority)) thread_yield();
+    }
+  }
 
   intr_set_level(old_level);
 }
@@ -729,10 +778,9 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list))
-    return idle_thread;
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  if (list_empty (&high_list) && list_empty(&low_list)) return idle_thread;
+  else if (list_empty(&high_list)) return list_entry (list_pop_front (&low_list), struct thread, elem);
+  else return list_entry (list_pop_front (&high_list), struct thread, elem);
 }
 
 /* Completes a thread switch by activating the new thread's page

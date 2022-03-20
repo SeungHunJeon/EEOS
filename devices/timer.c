@@ -183,7 +183,11 @@ timer_interrupt (struct intr_frame *args UNUSED)
   if (thread_mlfqs == true)
   {
     increase_recent_cpu();
-    if (ticks%4==0) recalculate_threads(ticks%TIMER_FREQ == 0);
+    if (ticks%4==0) 
+    {
+      calculate_priority(thread_current());
+      if(ticks%TIMER_FREQ == 0) recalculate_threads();
+    }
   }
 
   if (return_global() <= ticks) thread_awake(ticks);
