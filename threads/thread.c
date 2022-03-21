@@ -484,6 +484,7 @@ thread_set_priority (int new_priority)
 {
   if (thread_mlfqs == true) return;
 
+  enum intr_level old_level = intr_disable();
   thread_current ()->priority = new_priority;
   thread_current ()->original_priority = new_priority;
   
@@ -526,6 +527,8 @@ thread_set_priority (int new_priority)
       }
     }
   }
+
+  intr_set_level(old_level);
 
 
   // priority donation add
