@@ -38,7 +38,7 @@ struct condition
   };
 
 void cond_init (struct condition *);
-bool cmp_sema_priority (struct list_elem *ele, struct list_elem *e, void *aux);
+bool cmp_sema_priority (const struct list_elem *ele, const struct list_elem *e, void *aux);
 void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);

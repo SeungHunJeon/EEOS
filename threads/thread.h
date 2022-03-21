@@ -146,8 +146,8 @@ tid_t thread_tid (void);
 const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
-bool cmp_priority(struct list_elem *ele, struct list_elem *e, void *aux);
-bool cmp_tick(struct list_elem *ele, struct list_elem *e, void *aux);
+bool cmp_priority(const struct list_elem *ele, const struct list_elem *e, void *aux);
+bool cmp_tick(const struct list_elem *ele, const struct list_elem *e, void *aux);
 void thread_yield (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */

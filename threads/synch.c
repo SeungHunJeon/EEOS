@@ -286,7 +286,7 @@ lock_release (struct lock *lock)
     
     if (!list_empty(&cur->donations))
     {
-      struct thread *new_donor = list_entry(list_max(&cur->donations, cmp_priority, NULL), struct thread, d_elem);
+      struct thread *new_donor = list_entry(list_max(&cur->donations, &cmp_priority, NULL), struct thread, d_elem);
       if(new_donor->priority > cur->priority) cur->priority = new_donor->priority;
     }
   }
@@ -324,7 +324,7 @@ cond_init (struct condition *cond)
 }
 
 bool
-cmp_sema_priority (struct list_elem *ele, struct list_elem *e, void *aux)
+cmp_sema_priority (const struct list_elem *ele, const struct list_elem *e, void *aux UNUSED)
 {
   /* Condition waiters' form is semaphore_element. For ordered inserting,
    * to consider the wait thread's priority, it's bit different from previous
