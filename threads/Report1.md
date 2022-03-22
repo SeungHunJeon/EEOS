@@ -101,7 +101,7 @@ struct list_elem d_elem: donation list에 들어가는 thread의 element들이�
 >> .png file.)
 
 
-![CreatePlan](./image/Report1_fig1.jpg)
+![CreatePlan](imageeport1_fig1.jpg)
 
 
 본 팀은 priority donation을 위해 제공된 guide PPT의 그림을 참고하여 위 그림과 같은 구조를 설계하였다. lock A를 점유한 thread -> lock A를 기다리는 thread -> lock A를 기다리는 thread가 lock B를 점유 중 -> lock B를 기다리는 thread -> … 로 이어지는 nested 구조의 경우를 고려하기 위해 위 그림의 wait_on_lock, holder와 같은 structure element들을 도입하며 thread를 서로 link하여 tracking할 수 있었다.
